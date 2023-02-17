@@ -1,0 +1,25 @@
+{
+  "name": "sarahvenske-m4-sp3-projetos_e_desenvolvedores",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:Kenzie-Academy-Brasil-Developers/sarahvenske-m4-sp3-projetos_e_desenvolvedores.git",
+  "author": "<sarahvenske@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "dev": "ts-node-dev --cls --rs --ignore-watch node_modules src/app.ts"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {
+    "@types/dotenv": "^8.2.0",
+    "@types/express": "^4.17.17",
+    "@types/pg": "^8.6.6",
+    "@types/pg-format": "^1.0.2",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "pg": "^8.9.0",
+    "pg-format": "^1.0.4",
+    "ts-node-dev": "^2.0.0"
+  }
+}
