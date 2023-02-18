@@ -11,6 +11,24 @@ import {
     IInfoUpdateRequest 
 } from "../interfaces"
 
+const validatePostRoute = (payload: any, expectedKeys: Array<string>): any  =>  {
+
+    const payloadKeys: Array<string> = Object.keys(payload)
+
+    const newPayload: any = {}
+
+    expectedKeys.forEach((key: string) => {
+        if(payloadKeys.includes(key)){
+            newPayload[key] = payload[key]
+        }
+    })
+
+    return newPayload
+    
+}
+
+
+
 const validateCreateDeveloper = (payload: any): IDeveloperRequest => {
 
     const expectedKeys: Array<string> = ["name", "email", "developerInfoId"]
@@ -96,7 +114,7 @@ const updateCreateInfo = (payload: any): IInfosRequest => {
 const createDeveloper = async (req: Request, res: Response): Promise<Response> => {
     
     try {
-        const data: IDeveloperRequest = validateCreateDeveloper(req.body) 
+        const data: IDeveloperRequest = validatePostRoute(req.body, ["name", "email"]) 
     
         const queryTemplate: string = format(
             `
