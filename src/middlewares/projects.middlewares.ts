@@ -20,7 +20,7 @@ const verifyProjectExists = async (req: Request, res: Response, next: NextFuncti
     )
 
     const queryResult: ProjectResult = await client.query(queryTemplate)
-
+    
     if(!queryResult.rowCount){
         return res.status(404).json({
             message: "Project not found!"
@@ -32,29 +32,34 @@ const verifyProjectExists = async (req: Request, res: Response, next: NextFuncti
 
 const verifyProjectDeveloperExists = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
 
-    const id: number = req.body.developerId
+    if(req.body.developerId){
 
-    const queryTemplate: string = format(
-        `
-            SELECT
-                *
-            FROM 
-                developers AS d
-            WHERE
-                d."id" = %s;
-        `,
-        id
-    )
-
-    const queryResult: DeveloperResult = await client.query(queryTemplate)
-
-    if(!queryResult.rowCount){
-        return res.status(404).json({
-            message: "Developer not found!"
-        })
+        const id: number = req.body.developerId
+        const queryTemplate: string = format(
+            `
+                SELECT
+                    *
+                FROM 
+                    developers AS d
+                WHERE
+                    d."id" = %s;
+            `,
+            id
+        )
+    
+        const queryResult: DeveloperResult = await client.query(queryTemplate)
+    
+        if(!queryResult.rowCount){
+            return res.status(404).json({
+                message: "Developer not found!"
+            })
+        }
+    
+        return next()
     }
 
     return next()
+
 }
 
 export {

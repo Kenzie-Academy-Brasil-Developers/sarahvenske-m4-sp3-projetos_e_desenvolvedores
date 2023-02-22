@@ -37,7 +37,7 @@ app.get("/developers", listAllDevelopers)
 app.patch("/developers/:id", verifyDeveloperExists, verifyEmailAvailability, updateDeveloper)
 app.delete("/developers/:id", verifyDeveloperExists, deleteDeveloper)
 app.post("/developers/:id/infos", verifyDeveloperExists, createDeveloperInfos)
-app.patch("/developers/:id/infos", updateDeveloperInfos)
+app.patch("/developers/:id/infos", verifyDeveloperExists, updateDeveloperInfos)
 
 
 // Rotas - projects

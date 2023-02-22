@@ -1,55 +1,68 @@
-import { Request, Response } from "express"
+import { query, Request, Response } from "express"
 import format from "pg-format"
 import { client } from "../database"
 import { IProjectRequest, IProjectUpdateRequest, ITechnologyRequest, ProjectResult, TechnologyResult } from "../interfaces"
 
-const validateCreateProject = (payload: any): IProjectRequest => {
-    
-    const expectedKeys: Array<string> = ["name", "description", "estimatedTime", "repository", "startDate", "endDate", "developerId"]
-    const payloadKeys: Array<string> = Object.keys(payload)
+const validatePostRoute = (payload: any, keys: any): any  =>  {
 
-    const checkKeys: boolean = expectedKeys.every((key: string) => {
-        return payloadKeys.includes(key)
+    const payloadKeys: Array<string> = Object.keys(payload) 
+    const expectedKeys: Array<string> = Object.keys(keys) 
+
+    const newPayload: any = {}
+
+    expectedKeys.forEach((key:any) => {
+        console.log(payload[key])
+        if(!payloadKeys.includes(key) && typeof payload[key] !== keys[key]){
+            throw new Error(`Mising required keys!`)
+        } 
+        newPayload[key] = payload[key]
     })
 
-    if(!checkKeys){
-        throw new Error(`Required keys are ${expectedKeys}`)
-    }
+    return newPayload
 
-    const checkUnexpectedKeys: boolean = payloadKeys.every((key: string) => {
-        return expectedKeys.includes(key)
-    })
-
-    if(!checkUnexpectedKeys){
-        throw new Error("Non required keys detected")
-    }
-
-    return payload
-    
 }
 
-const validateUpdateProject = (payload: any): IProjectUpdateRequest => {
+const validatePatchRoute = (payload: any, keys: any): any  => {
 
-    const expectedKeys: Array<string> = ["name", "description", "estimatedTime", "repository", "startDate", "endDate", "developerId"]
-    const payloadKeys: Array<string> = Object.keys(payload)
+    const payloadKeys: Array<string> = Object.keys(payload) 
+    const expectedKeys: Array<string> = Object.keys(keys) 
 
-    const checkKeys: boolean = payloadKeys.every((key: string) => {
-        return expectedKeys.includes(key)
+    const newPayload: any = {}
+
+    const check: boolean = payloadKeys.some((key: any) => {
+        return expectedKeys.includes(key)   
     })
 
-    if(!checkKeys){
-        throw new Error("Non required keys detected")
+    if(!check){
+        throw new Error(`Missing at least one required key: ${(expectedKeys)}`)
     }
+    
+    payloadKeys.forEach((key:any) => {
+        if(expectedKeys.includes(key)){
+            newPayload[key] = payload[key]
+        }
+    })
 
-    return payload
- 
+    return newPayload
 }
+
+
 
 
 const createProject = async (req: Request, res: Response): Promise<Response> => {   
     
     try {
-        const data: IProjectRequest = validateCreateProject(req.body)
+
+        const keys = {
+            name: "string",
+            description: "string",
+            estimatedTime: "string",
+            repository: "string",
+            startDate: "string",
+            developerId: "number"
+        }
+
+        const data: IProjectRequest = validatePostRoute(req.body, keys)
     
         const queryTemplate: string = format(
             `
@@ -147,8 +160,18 @@ const listAllProjects = async (req: Request, res: Response): Promise<Response> =
 const updateProject = async (req: Request, res: Response): Promise<Response> => {  
     
     try {
+        const keys = {
+            name: "string",
+            description: "string",
+            estimatedTime: "string",
+            repository: "string",
+            startDate: "string",
+            developerId: "number"
+        }
+
         const projectId: number = parseInt(req.params.id)
-        const data: IProjectUpdateRequest = validateUpdateProject(req.body)
+        
+        const data: IProjectUpdateRequest = validatePatchRoute(req.body, keys)
         
         const queryTemplate: string = format(
             `
@@ -207,50 +230,51 @@ const deleteProject = async (req: Request, res: Response): Promise<Response> => 
 const createTechnology = async (req: Request, res: Response): Promise<Response> => {   
     
     const projectId: number = parseInt(req.params.id)
+   
     const name: string = req.body.name
     
     let queryTemplate: string = format(
         `
             SELECT
-                "id"
+                *
             FROM
-                technologies    
-            WHERE
-                "name" = '%s';   
+                technologies t    
+            WHERE 
+                t."name" ILIKE %L;   
         `,
         name
     )
 
     let queryResult: TechnologyResult = await client.query(queryTemplate)
-
+    
     const techId: number = queryResult.rows[0].id
    
     queryTemplate = format(
         `
-        SELECT 
+        SELECT
             *
         FROM 
-            technologies AS t
-        LEFT JOIN
-            projects_technologies AS pt ON t.id = pt."technologyId" 
+            projects p 
         LEFT JOIN 
-            projects AS p ON pt."projectId" = p.id
+            projects_technologies pt ON p.id = pt."projectId" 
+        LEFT JOIN
+            technologies t ON pt."technologyId" = t.id
         WHERE 
-            t."name" = '%s' AND p.id = %s;
+            p.id = %s AND t.id = %s; 
         `,
-        name,
+        projectId,
         techId
     )
 
     queryResult = await client.query(queryTemplate)
-    
+
     if(queryResult.rowCount){
         return res.status(404).json({
             message: "Technology already created to the Project!"
         })
     }
 
-    const addedIn: string = req.body.addedIn
+    const addedIn: Date = new Date()
 
     queryTemplate = format(
         `
@@ -259,7 +283,7 @@ const createTechnology = async (req: Request, res: Response): Promise<Response> 
             VALUES 
                 (%L, %s, %s)
             RETURNING
-                *;
+                *;  
         `,
     addedIn,
     techId,
@@ -287,77 +311,94 @@ const createTechnology = async (req: Request, res: Response): Promise<Response> 
         LEFT JOIN 
             projects AS p ON pt."projectId" = p.id
         WHERE 
-            t."name" = '%s' AND p.id = %s;
+            p.id = %s AND t.id = %s; 
         `,
-        name,
+        projectId,
         techId
     )
 
     queryResult = await client.query(queryTemplate)
 
-    return res.status(200).json(queryResult)
+    return res.status(200).json(queryResult.rows[0])
 }
 
 const deleteTechnology = async (req: Request, res: Response): Promise<Response> => {   
 
-    const projectId: number = parseInt(req.params.id)
-    const name: string = req.params.name
+    try {
+        
+        const projectId: number = parseInt(req.params.id)
+        const name: string = req.params.name
+        
+        let queryTemplate: string = format(
+            `
+                SELECT
+                    "id"
+                FROM
+                    technologies    
+                WHERE
+                    "name" = '%s';   
+            `,
+            name
+        )
     
-    let queryTemplate: string = format(
-        `
+        let queryResult: TechnologyResult = await client.query(queryTemplate)
+        
+        if(queryResult.rowCount === 0){
+            throw new Error("Technology does not exists!")
+        }
+    
+        const techId: number = queryResult.rows[0].id
+    
+        queryTemplate = format(
+            `
             SELECT
-                "id"
-            FROM
-                technologies    
-            WHERE
-                "name" = '%s';   
-        `,
-        name
-    )
-
-    let queryResult: TechnologyResult = await client.query(queryTemplate)
-
-    const techId: number = queryResult.rows[0].id
-   
-    queryTemplate = format(
-        `
-        SELECT 
-            *
-        FROM 
-            technologies AS t
-        LEFT JOIN
-            projects_technologies AS pt ON t.id = pt."technologyId" 
-        LEFT JOIN 
-            projects AS p ON pt."projectId" = p.id
-        WHERE 
-            t."name" = '%s' AND p.id = %s;
-        `,
-        name,
-        techId
-    )
-
-    queryResult = await client.query(queryTemplate)
+                *
+            FROM 
+                projects p 
+            LEFT JOIN 
+                projects_technologies pt ON p.id = pt."projectId" 
+            LEFT JOIN
+                technologies t ON pt."technologyId" = t.id
+            WHERE 
+                p.id = %s AND t.id = %s; 
+            `,
+            projectId,
+            techId
+        )
     
-    if(!queryResult.rowCount){
-        return res.status(404).json({
-            message: `Technology ${name} not found `
+        queryResult = await client.query(queryTemplate)
+    
+        if(!queryResult.rowCount){
+            throw new Error(`Technology ${name} not found`)
+        }
+    
+        queryTemplate = format(
+            `
+            DELETE FROM
+                projects_technologies 
+            WHERE
+                "technologyId" = %s AND "projectId" = %s; 
+            `,
+            techId,
+            projectId
+        )
+    
+        await client.query(queryTemplate)
+    
+        return res.status(204).send()
+        
+    } catch (error) {
+        if(error instanceof Error){
+            return res.status(400).json({
+                message: error.message
+            })
+        }
+        console.log(error)
+        
+        return res.status(500).json({
+            message: 'Internal server error'
         })
     }
-
-    queryTemplate = format(
-        `
-        DELETE FROM
-            projects_technologies 
-        WHERE
-            "technologyId" = %s AND "projectId" = %s; 
-        `,
-        techId,
-        projectId
-    )
-
-    await client.query(queryTemplate)
-
-    return res.status(204).send()
 
 }
 

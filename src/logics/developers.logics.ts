@@ -11,110 +11,59 @@ import {
     IInfoUpdateRequest 
 } from "../interfaces"
 
-const validatePostRoute = (payload: any, expectedKeys: Array<string>): any  =>  {
+const validatePostRoute = (payload: any, keys: any): any  =>  {
 
-    const payloadKeys: Array<string> = Object.keys(payload)
+    const payloadKeys: Array<string> = Object.keys(payload) 
+    const expectedKeys: Array<string> = Object.keys(keys) 
 
     const newPayload: any = {}
 
-    expectedKeys.forEach((key: string) => {
-        if(payloadKeys.includes(key)){
-            newPayload[key] = payload[key]
-        }
+    expectedKeys.forEach((key:any) => {
+        console.log(payload[key])
+        if(!payloadKeys.includes(key) && typeof payload[key] !== keys[key]){
+            throw new Error(`Mising required keys!`)
+        } 
+        newPayload[key] = payload[key]
     })
 
     return newPayload
     
 }
 
+const validatePatchRoute = (payload: any, keys: any): any  => {
 
+    const payloadKeys: Array<string> = Object.keys(payload) 
+    const expectedKeys: Array<string> = Object.keys(keys) 
 
-const validateCreateDeveloper = (payload: any): IDeveloperRequest => {
+    const newPayload: any = {}
 
-    const expectedKeys: Array<string> = ["name", "email", "developerInfoId"]
-    const payloadKeys: Array<string> = Object.keys(payload)
-
-    const checkKeys: boolean = expectedKeys.every((key: string) => {
-        return payloadKeys.includes(key)
+    const check: boolean = payloadKeys.some((key: any) => {
+        return expectedKeys.includes(key)   
     })
 
-    if(!checkKeys){
-        throw new Error(`Required keys are ${expectedKeys}`)
+    if(!check){
+        throw new Error(`Missing at least one required key: ${(expectedKeys)}`)
     }
-
-    const checkUnexpectedKeys: boolean = payloadKeys.every((key: string) => {
-        return expectedKeys.includes(key)
+    
+    payloadKeys.forEach((key:any) => {
+        if(expectedKeys.includes(key)){
+            newPayload[key] = payload[key]
+        }
     })
 
-    if(!checkUnexpectedKeys){
-        throw new Error("Non required keys detected")
-    }
-
-    return payload
-
-}
-
-const validateUpdateDeveloper = (payload: any): IDeveloperRequest => {
-
-    const expectedKeys: Array<string> = ["name", "email", "developerInfoId"]
-    const payloadKeys: Array<string> = Object.keys(payload)
-
-    const checkKeys: boolean = payloadKeys.every((key: string) => {
-        return expectedKeys.includes(key)
-    })
-
-    if(!checkKeys){
-        throw new Error("Non required keys detected")
-    }
-
-    return payload
-}
-
-const validateCreateInfo = (payload: any): IInfosRequest => {
-
-    const expectedKeys: Array<string> = ["developerSince", "preferredOS"]
-    const payloadKeys: Array<string> = Object.keys(payload)
-
-    const checkKeys: boolean = expectedKeys.every((key: string) => {
-        return payloadKeys.includes(key)
-    })
-
-    if(!checkKeys){
-        throw new Error(`Required keys are ${expectedKeys}`)
-    }
-
-    const checkUnexpectedKeys: boolean = payloadKeys.every((key: string) => {
-        return expectedKeys.includes(key)
-    })
-
-    if(!checkUnexpectedKeys){
-        throw new Error("Non required keys detected")
-    }
-
-    return payload
-}
-
-const updateCreateInfo = (payload: any): IInfosRequest => {
-
-    const expectedKeys: Array<string> = ["developerSince", "preferredOS"]
-    const payloadKeys: Array<string> = Object.keys(payload)
-
-    const checkKeys: boolean = payloadKeys.every((key: string) => {
-        return expectedKeys.includes(key)
-    })
-
-    if(!checkKeys){
-        throw new Error("Non required keys detected")
-    }
-
-    return payload
- 
+    return newPayload
 }
 
 const createDeveloper = async (req: Request, res: Response): Promise<Response> => {
     
     try {
-        const data: IDeveloperRequest = validatePostRoute(req.body, ["name", "email"]) 
+
+        const keys = {
+            name: "string",
+            email: "string"
+        }
+
+        const data: IDeveloperRequest = validatePostRoute(req.body, keys) 
     
         const queryTemplate: string = format(
             `
@@ -145,7 +94,6 @@ const createDeveloper = async (req: Request, res: Response): Promise<Response> =
             message: 'Internal server error'
         })
     }
-
 }
 
 const listOneDeveloper = async (req: Request, res: Response): Promise<Response> => {
@@ -245,8 +193,13 @@ const listDeveloperProjects = async (req: Request, res: Response): Promise<Respo
 const updateDeveloper = async (req: Request, res: Response): Promise<Response> => {
 
     try {
+        const keys = {
+            name: "string",
+            email: "string"
+        }
+
         const id: number = parseInt(req.params.id)
-        const data: IDeveloperUpdateRequest = validateUpdateDeveloper(req.body) 
+        const data: IDeveloperUpdateRequest = validatePatchRoute(req.body, keys) 
     
         const queryTemplate: string = format(
             `
@@ -305,9 +258,38 @@ const deleteDeveloper = async (req: Request, res: Response): Promise<Response> =
 const createDeveloperInfos = async (req: Request, res: Response): Promise<Response> => {
 
     try {
-        const data: IInfosRequest = validateCreateInfo(req.body)
-        
+
+        const keys = {
+            developerSince: "string",
+            preferredOS: "string" 
+        }
+
+        const data: IInfosRequest = validatePostRoute(req.body, keys)
+        const devId: number = parseInt(req.params.id)
+
         let queryTemplate: string = format(
+            `
+            SELECT 
+                *
+            FROM 
+                developers d 
+            LEFT JOIN 
+                developer_infos di ON d."developerInfoId" = di."id"
+            WHERE
+                d.id = %s AND (di."developerSince" = %L or di."preferredOS" = %L); 
+            `, 
+            devId,
+            data.developerSince,
+            data.preferredOS
+        )
+
+        let queryResult: InfoResult  = await client.query(queryTemplate)
+        
+        if(queryResult.rowCount){
+            throw new Error("Developer infos already registered!")
+        }
+
+        queryTemplate = format(
             `
                 INSERT INTO 
                     developer_infos(%I)
@@ -320,10 +302,9 @@ const createDeveloperInfos = async (req: Request, res: Response): Promise<Respon
             Object.values(data)
             )
             
-        const queryResult: InfoResult  = await client.query(queryTemplate)
+        queryResult = await client.query(queryTemplate)
         
         const infoId: number = queryResult.rows[0].id
-        const devId: number = parseInt(req.params.id)
         
         queryTemplate = format(
             `
@@ -346,6 +327,11 @@ const createDeveloperInfos = async (req: Request, res: Response): Promise<Respon
         
     } catch (error) {
         if(error instanceof Error){
+            if(error.message.includes("invalid input value for enum os_type")){
+                return res.status(409).json({
+                  message: "PreferredOS should be Windows, Linux or MacOS",
+                })
+            }
             return res.status(400).json({
                 message: error.message
             })
@@ -380,7 +366,12 @@ const updateDeveloperInfos = async (req: Request, res: Response): Promise<Respon
         
         const infoId: number = queryResult.rows[0].id
         
-        const data: IInfoUpdateRequest = updateCreateInfo(req.body) 
+        const keys = {
+            developerSince: "string",
+            preferredOS: "string" 
+        }
+
+        const data: IInfoUpdateRequest = validatePatchRoute(req.body, keys) 
     
         queryTemplate = format(
             `
@@ -403,6 +394,11 @@ const updateDeveloperInfos = async (req: Request, res: Response): Promise<Respon
         
     } catch (error) {
         if(error instanceof Error){
+            if(error.message.includes("invalid input value for enum os_type")){
+                return res.status(409).json({
+                  message: "PreferredOS should be Windows, Linux or MacOS",
+                })
+            }
             return res.status(400).json({
                 message: error.message
             })
